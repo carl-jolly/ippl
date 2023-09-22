@@ -3,19 +3,6 @@
 //   FFT-based Poisson Solver for open boundaries.
 //   Solves laplace(phi) = -rho, and E = -grad(phi).
 //
-// Copyright (c) 2023, Sonali Mayani,
-// Paul Scherrer Institut, Villigen PSI, Switzerland
-// All rights reserved
-//
-// This file is part of IPPL.
-//
-// IPPL is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// You should have received a copy of the GNU General Public License
-// along with IPPL. If not, see <https://www.gnu.org/licenses/>.
 //
 
 // Communication specific functions (pack and unpack).
@@ -65,7 +52,7 @@ void pack(const ippl::NDIndex<Dim> intersect, View& view,
     Kokkos::fence();
 }
 
-template <bool isVec, typename Tb, typename View, unsigned int Dim>
+template <int tensorRank, typename Tb, typename View, unsigned int Dim>
 void unpack_impl(const ippl::NDIndex<Dim> intersect, const View& view,
                  ippl::detail::FieldBufferData<Tb>& fd, int nghost, const ippl::NDIndex<Dim> ldom,
                 std::vector<bool> coordBool, size_t dim1 = 0) {
@@ -99,7 +86,7 @@ void unpack_impl(const ippl::NDIndex<Dim> intersect, const View& view,
                 l += igVec[d] * factor;
             }
 
-            ippl::detail::ViewAccess<isVec, View, Dim>::get(view, dim1, args) = buffer(l);
+            ippl::detail::ViewAccess<tensorRank, View, Dim>::get(view, dim1, args) = buffer(l);
         });
     Kokkos::fence();
 }
@@ -108,14 +95,23 @@ template <typename Tb, typename View, unsigned int Dim>
 void unpack(const ippl::NDIndex<Dim> intersect, const View& view,
             ippl::detail::FieldBufferData<Tb>& fd, int nghost, const ippl::NDIndex<Dim> ldom,
             std::vector<bool> coordBool, size_t dim1 = 0) {
-    unpack_impl<false, Tb, View>(intersect, view, fd, nghost, ldom, coordBool, dim1);
+    unpack_impl<0, Tb, View>(intersect, view, fd, nghost, ldom, coordBool, dim1);
 }
 
 template <typename Tb, typename View, unsigned int Dim>
 void unpack(const ippl::NDIndex<Dim> intersect, View& view,
             ippl::detail::FieldBufferData<Tb>& fd, int nghost,
             const ippl::NDIndex<Dim> ldom, std::vector<bool> coordBool, size_t dim1) {
-    unpack_impl<true, Tb, View>(intersect, view, fd, nghost, ldom, coordBool, dim1);
+    unpack_impl<1, Tb, View>(intersect, view, fd, nghost, ldom, coordBool, dim1);
+}
+
+template <typename Tb, typename View, unsigned int Dim>
+void unpack(const ippl::NDIndex<Dim> intersect,
+            const Kokkos::View<ippl::Vector<ippl::Vector<View, Dim>, Dim>***>& view,
+            ippl::detail::FieldBufferData<Tb>& fd, int nghost, const ippl::NDIndex<Dim> ldom,
+            size_t dim1, size_t dim2) {
+    unpack_impl<2, Tb, ippl::Vector<ippl::Vector<View, Dim>, Dim>>(intersect, view, fd, nghost, ldom,
+                                                             dim1, dim2);
 }
 
 namespace ippl {
@@ -404,9 +400,9 @@ namespace ippl {
         static IpplTimings::TimerRef warmup = IpplTimings::getTimer("Warmup");
         IpplTimings::startTimer(warmup);
 
-        fft_m->transform(+1, rho2_mr, rho2tr_m);
+        fft_m->transform(FORWARD, rho2_mr, rho2tr_m);
         if (alg == Algorithm::VICO || alg == Algorithm::BIHARMONIC) {
-            fft4n_m->transform(+1, grnL_m);
+            fft4n_m->transform(FORWARD, grnL_m);
         }
 
         IpplTimings::stopTimer(warmup);
@@ -559,7 +555,7 @@ namespace ippl {
         IpplTimings::startTimer(fftrho);
 
         // forward FFT of the charge density field on doubled grid
-        fft_m->transform(+1, rho2_mr, rho2tr_m);
+        fft_m->transform(FORWARD, rho2_mr, rho2tr_m);
 
         IpplTimings::stopTimer(fftrho);
 
@@ -580,7 +576,7 @@ namespace ippl {
             IpplTimings::startTimer(fftc);
 
             // inverse FFT of the product and store the electrostatic potential in rho2_mr
-            fft_m->transform(-1, rho2_mr, rho2tr_m);
+            fft_m->transform(BACKWARD, rho2_mr, rho2tr_m);
 
             IpplTimings::stopTimer(fftc);
 
@@ -744,7 +740,7 @@ namespace ippl {
                 IpplTimings::startTimer(ffte);
 
                 // transform to get E-field
-                fft_m->transform(-1, rho2_mr, temp_m);
+                fft_m->transform(BACKWARD, rho2_mr, temp_m);
 
                 IpplTimings::stopTimer(ffte);
 
@@ -904,7 +900,7 @@ namespace ippl {
                         IpplTimings::startTimer(ffth);
 
                         // transform to get Hessian
-                        fft_m->transform(-1, rho2_mr, temp_m);
+                        fft_m->transform(BACKWARD, rho2_mr, temp_m);
 
                         IpplTimings::stopTimer(ffth);
 
@@ -1118,7 +1114,7 @@ namespace ippl {
                 IpplTimings::startTimer(fft4);
 
                 // inverse Fourier transform of the green's function for precomputation
-                fft4n_m->transform(-1, grnL_m);
+                fft4n_m->transform(BACKWARD, grnL_m);
 
                 IpplTimings::stopTimer(fft4);
 
@@ -1224,7 +1220,7 @@ namespace ippl {
         IpplTimings::startTimer(fftg);
 
         // perform the FFT of the Green's function for the convolution
-        fft_m->transform(+1, grn_mr, grntr_m);
+        fft_m->transform(FORWARD, grn_mr, grntr_m);
 
         IpplTimings::stopTimer(fftg);
     };

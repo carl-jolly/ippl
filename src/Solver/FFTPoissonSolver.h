@@ -3,19 +3,6 @@
 //   FFT-based Poisson Solver for open boundaries.
 //   Solves laplace(phi) = -rho, and E = -grad(phi).
 //
-// Copyright (c) 2023, Sonali Mayani,
-// Paul Scherrer Institut, Villigen PSI, Switzerland
-// All rights reserved
-//
-// This file is part of IPPL.
-//
-// IPPL is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// You should have received a copy of the GNU General Public License
-// along with IPPL. If not, see <https://www.gnu.org/licenses/>.
 //
 
 #ifndef FFT_POISSON_SOLVER_H_
@@ -50,19 +37,20 @@ namespace ippl {
          * @tparam tensorRank indicates whether scalar, vector, or matrix field
          * @tparam - the view type
          */
-        template <bool isVec, typename, unsigned int Dim>
+        template <int tensorRank, typename, unsigned int Dim>
         struct ViewAccess;
 
-        //template <typename View, unsigned int Dim>
-        //struct ViewAccess<2, View, Dim> {
-        //    using index_array_type = typename ippl::RangePolicy<Dim>::index_array_type;
-        //    KOKKOS_INLINE_FUNCTION constexpr static auto& get(View view, unsigned dim1, unsigned dim2, const index_array_type& args) {
-        //        return apply(view, args)[dim1][dim2];
-        //    }
-        //};
+        template <typename View, unsigned int Dim>
+        struct ViewAccess<2, View, Dim> {
+            using index_array_type = typename ippl::RangePolicy<Dim>::index_array_type;
+            KOKKOS_INLINE_FUNCTION constexpr static auto& get(View&& view, unsigned dim1,
+                                                              unsigned dim2, const index_array_type& args) {
+                return apply(view, args)[dim1][dim2];
+            }
+        };
 
         template <typename View, unsigned int Dim>
-        struct ViewAccess<true, View, Dim> {
+        struct ViewAccess<1, View, Dim> {
             using index_array_type = typename ippl::RangePolicy<Dim>::index_array_type;
             KOKKOS_INLINE_FUNCTION constexpr static auto& get(View view, unsigned dim1, //[[maybe_unused]] unsigned dim2
                                                                          const index_array_type& args) {
@@ -71,7 +59,7 @@ namespace ippl {
         };
 
         template <typename View, unsigned int Dim>
-        struct ViewAccess<false, View, Dim> {
+        struct ViewAccess<0, View, Dim> {
             using index_array_type = typename ippl::RangePolicy<Dim>::index_array_type;
             KOKKOS_INLINE_FUNCTION constexpr static auto& get(View view,
                                                               [[maybe_unused]] unsigned dim1,
@@ -80,6 +68,7 @@ namespace ippl {
                 return apply(view, args);
             }
         };
+
     }  // namespace detail
 
     template <typename FieldLHS, typename FieldRHS>
