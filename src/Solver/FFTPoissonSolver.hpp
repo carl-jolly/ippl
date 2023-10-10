@@ -55,7 +55,7 @@ void pack(const ippl::NDIndex<Dim> intersect, View& view,
 template <int tensorRank, typename Tb, typename View, unsigned int Dim>
 void unpack_impl(const ippl::NDIndex<Dim> intersect, const View& view,
                  ippl::detail::FieldBufferData<Tb>& fd, int nghost, const ippl::NDIndex<Dim> ldom,
-                std::vector<bool> coordBool, size_t dim1 = 0) {
+                std::vector<bool> coordBool, size_t dim1 = 0, size_t dim2 = 0) {
     Kokkos::View<Tb*>& buffer = fd.buffer;
 
     using index_type = typename ippl::RangePolicy<Dim>::index_type;
@@ -86,7 +86,7 @@ void unpack_impl(const ippl::NDIndex<Dim> intersect, const View& view,
                 l += igVec[d] * factor;
             }
 
-            ippl::detail::ViewAccess<tensorRank, View, Dim>::get(view, dim1, args) = buffer(l);
+            ippl::detail::ViewAccess<tensorRank, View, Dim>::get(view, dim1, dim2, args) = buffer(l);
         });
     Kokkos::fence();
 }
@@ -94,24 +94,25 @@ void unpack_impl(const ippl::NDIndex<Dim> intersect, const View& view,
 template <typename Tb, typename View, unsigned int Dim>
 void unpack(const ippl::NDIndex<Dim> intersect, const View& view,
             ippl::detail::FieldBufferData<Tb>& fd, int nghost, const ippl::NDIndex<Dim> ldom,
-            std::vector<bool> coordBool, size_t dim1 = 0) {
-    unpack_impl<0, Tb, View>(intersect, view, fd, nghost, ldom, coordBool, dim1);
+            std::vector<bool> coordBool) {
+    unpack_impl<0, Tb, View, Dim>(intersect, view, fd, nghost, ldom, coordBool);
 }
 
 template <typename Tb, typename View, unsigned int Dim>
 void unpack(const ippl::NDIndex<Dim> intersect, View& view,
             ippl::detail::FieldBufferData<Tb>& fd, int nghost,
             const ippl::NDIndex<Dim> ldom, std::vector<bool> coordBool, size_t dim1) {
-    unpack_impl<1, Tb, View>(intersect, view, fd, nghost, ldom, coordBool, dim1);
+    unpack_impl<1, Tb, View, Dim>(intersect, view, fd, nghost, ldom, coordBool, dim1);
 }
 
 template <typename Tb, typename View, unsigned int Dim>
 void unpack(const ippl::NDIndex<Dim> intersect,
-            const Kokkos::View<ippl::Vector<ippl::Vector<View, Dim>, Dim>***>& view,
+            const View& view,
+            //const Kokkos::View<ippl::Vector<ippl::Vector<View, Dim>, Dim>***>& view,
             ippl::detail::FieldBufferData<Tb>& fd, int nghost, const ippl::NDIndex<Dim> ldom,
-            size_t dim1, size_t dim2) {
-    unpack_impl<2, Tb, ippl::Vector<ippl::Vector<View, Dim>, Dim>>(intersect, view, fd, nghost, ldom,
-                                                             dim1, dim2);
+            std::vector<bool> coordBool, size_t dim1, size_t dim2) {
+    unpack_impl<2, Tb, View, Dim>(intersect, view, fd, nghost, ldom,
+                                                             coordBool, dim1, dim2);
 }
 
 namespace ippl {
@@ -963,8 +964,8 @@ namespace ippl {
                                             nrecvs);
                                     buf->resetReadPos();
 
-                                    //std::vector<bool> coordBoolVec(Dim, false);
-                                    //unpack(intersection, viewH, fd_m, nghostH, ldom1, coordBoolVec, row, col);
+                                    std::vector<bool> coordBoolVec(Dim, false);
+                                    unpack(intersection, viewH, fd_m, nghostH, ldom1, coordBoolVec, row, col);
                                 }
                             }
 
