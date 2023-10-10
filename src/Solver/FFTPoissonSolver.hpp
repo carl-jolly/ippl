@@ -55,7 +55,7 @@ void pack(const ippl::NDIndex<Dim> intersect, View& view,
 template <int tensorRank, typename Tb, typename View, unsigned int Dim>
 void unpack_impl(const ippl::NDIndex<Dim> intersect, const View& view,
                  ippl::detail::FieldBufferData<Tb>& fd, int nghost, const ippl::NDIndex<Dim> ldom,
-                std::vector<bool> coordBool, size_t dim1 = 0, size_t dim2 = 0) {
+                 ippl::Vector<bool, Dim> coordBool, size_t dim1 = 0, size_t dim2 = 0) {
     Kokkos::View<Tb*>& buffer = fd.buffer;
 
     using index_type = typename ippl::RangePolicy<Dim>::index_type;
@@ -94,23 +94,22 @@ void unpack_impl(const ippl::NDIndex<Dim> intersect, const View& view,
 template <typename Tb, typename View, unsigned int Dim>
 void unpack(const ippl::NDIndex<Dim> intersect, const View& view,
             ippl::detail::FieldBufferData<Tb>& fd, int nghost, const ippl::NDIndex<Dim> ldom,
-            std::vector<bool> coordBool) {
+            ippl::Vector<bool, Dim> coordBool) {
     unpack_impl<0, Tb, View, Dim>(intersect, view, fd, nghost, ldom, coordBool);
 }
 
 template <typename Tb, typename View, unsigned int Dim>
 void unpack(const ippl::NDIndex<Dim> intersect, View& view,
             ippl::detail::FieldBufferData<Tb>& fd, int nghost,
-            const ippl::NDIndex<Dim> ldom, std::vector<bool> coordBool, size_t dim1) {
+            const ippl::NDIndex<Dim> ldom, ippl::Vector<bool, Dim> coordBool, size_t dim1) {
     unpack_impl<1, Tb, View, Dim>(intersect, view, fd, nghost, ldom, coordBool, dim1);
 }
 
 template <typename Tb, typename View, unsigned int Dim>
 void unpack(const ippl::NDIndex<Dim> intersect,
             const View& view,
-            //const Kokkos::View<ippl::Vector<ippl::Vector<View, Dim>, Dim>***>& view,
             ippl::detail::FieldBufferData<Tb>& fd, int nghost, const ippl::NDIndex<Dim> ldom,
-            std::vector<bool> coordBool, size_t dim1, size_t dim2) {
+            ippl::Vector<bool, Dim> coordBool, size_t dim1, size_t dim2) {
     unpack_impl<2, Tb, View, Dim>(intersect, view, fd, nghost, ldom,
                                                              coordBool, dim1, dim2);
 }
@@ -517,7 +516,7 @@ namespace ippl {
                     Comm->recv(i, OPEN_SOLVER_TAG, fd_m, *buf, nrecvs * sizeof(Trhs), nrecvs);
                     buf->resetReadPos();
 
-                    std::vector<bool> coordBoolVec(Dim, false);
+                    ippl::Vector<bool, Dim> coordBoolVec(false);
                     unpack(intersection, view2, fd_m, nghost2, ldom2, coordBoolVec);
                 }
             }
@@ -643,7 +642,7 @@ namespace ippl {
                         Comm->recv(i, OPEN_SOLVER_TAG, fd_m, *buf, nrecvs * sizeof(Trhs), nrecvs);
                         buf->resetReadPos();
                         
-                        std::vector<bool> coordBoolVec(Dim, false);
+                        ippl::Vector<bool, Dim> coordBoolVec(false);
                         unpack(intersection, view1, fd_m, nghost1, ldom1, coordBoolVec);
                     }
                 }
@@ -803,7 +802,7 @@ namespace ippl {
                                        nrecvs);
                             buf->resetReadPos();
                             
-                            std::vector<bool> coordBoolVec(Dim, false);
+                            ippl::Vector<bool, Dim> coordBoolVec(false);
                             unpack(intersection, viewL, fd_m, nghostL, ldom1, coordBoolVec, gd);
                         }
                     }
@@ -964,7 +963,7 @@ namespace ippl {
                                             nrecvs);
                                     buf->resetReadPos();
 
-                                    std::vector<bool> coordBoolVec(Dim, false);
+                                    ippl::Vector<bool, Dim> coordBoolVec(false);
                                     unpack(intersection, viewH, fd_m, nghostH, ldom1, coordBoolVec, row, col);
                                 }
                             }
@@ -1529,7 +1528,7 @@ namespace ippl {
                     Comm->recv(i, tag, fd_m, *buf, nrecvs * sizeof(Trhs), nrecvs);
                     buf->resetReadPos();
                     
-                    std::vector<bool> coordBoolVec(Dim, false);
+                    ippl::Vector<bool, Dim> coordBoolVec(false);
                     unpack(intersection, view, fd_m, nghost, ldom, coordBoolVec);
                 }
             }
@@ -1563,7 +1562,7 @@ namespace ippl {
                     Comm->recv(i, tag, fd_m, *buf, nrecvs * sizeof(Trhs), nrecvs);
                     buf->resetReadPos();
 
-                    std::vector<bool> coordBoolVec = {true, false, false};
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, false, false};
                     unpack(intersection, view, fd_m, nghost, ldom, coordBoolVec);
                 }
             }
@@ -1597,7 +1596,7 @@ namespace ippl {
                     Comm->recv(i, tag, fd_m, *buf, nrecvs * sizeof(Trhs), nrecvs);
                     buf->resetReadPos();
 
-                    std::vector<bool> coordBoolVec = {false, true, false};
+                    ippl::Vector<bool, Dim> coordBoolVec = {false, true, false};
                     unpack(intersection, view, fd_m, nghost, ldom, coordBoolVec);
                 }
             }
@@ -1631,7 +1630,7 @@ namespace ippl {
                     Comm->recv(i, tag, fd_m, *buf, nrecvs * sizeof(Trhs), nrecvs);
                     buf->resetReadPos();
 
-                    std::vector<bool> coordBoolVec = {false, false, true};
+                    ippl::Vector<bool, Dim> coordBoolVec = {false, false, true};
                     unpack(intersection, view, fd_m, nghost, ldom, coordBoolVec);
                 }
             }
@@ -1669,7 +1668,7 @@ namespace ippl {
                     Comm->recv(i, tag, fd_m, *buf, nrecvs * sizeof(Trhs), nrecvs);
                     buf->resetReadPos();
 
-                    std::vector<bool> coordBoolVec = {true, true, false};
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, true, false};
                     unpack(intersection, view, fd_m, nghost, ldom, coordBoolVec);
                 }
             }
@@ -1707,7 +1706,7 @@ namespace ippl {
                     Comm->recv(i, tag, fd_m, *buf, nrecvs * sizeof(Trhs), nrecvs);
                     buf->resetReadPos();
 
-                    std::vector<bool> coordBoolVec = {false, true, true};
+                    ippl::Vector<bool, Dim> coordBoolVec = {false, true, true};
                     unpack(intersection, view, fd_m, nghost, ldom, coordBoolVec);
                 }
             }
@@ -1745,7 +1744,7 @@ namespace ippl {
                     Comm->recv(i, tag, fd_m, *buf, nrecvs * sizeof(Trhs), nrecvs);
                     buf->resetReadPos();
                     
-                    std::vector<bool> coordBoolVec = {true, false, true};
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, false, true};
                     unpack(intersection, view, fd_m, nghost, ldom, coordBoolVec);
                 }
             }
@@ -1787,7 +1786,7 @@ namespace ippl {
                     Comm->recv(i, tag, fd_m, *buf, nrecvs * sizeof(Trhs), nrecvs);
                     buf->resetReadPos();
 
-                    std::vector<bool> coordBoolVec = {true, true, true};
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, true, true};
                     unpack(intersection, view, fd_m, nghost, ldom, coordBoolVec);
                 }
             }
