@@ -36,7 +36,7 @@
 #include "Utility/IpplException.h"
 #include "Utility/IpplTimings.h"
 
-#include "Solver/FFTPoissonSolver.h"
+#include "PoissonSolvers/FFTOpenPoissonSolver.h"
 
 template <typename T>
 using Mesh_t = typename ippl::UniformCartesian<T, 2>;
@@ -51,7 +51,7 @@ template <typename T>
 using VectorField_t = typename ippl::Field<ippl::Vector<T, 2>, 2, Mesh_t<T>, Centering_t<T>>;
 
 template <typename T>
-using Solver_t = ippl::FFTPoissonSolver<VectorField_t<T>, ScalarField_t<T>>;
+using Solver_t = ippl::FFTOpenPoissonSolver<VectorField_t<T>, ScalarField_t<T>>;
 
 template <typename T>
 KOKKOS_INLINE_FUNCTION T gaussian(T x, T y, T sigma = 0.05, T mu = 0.5) {

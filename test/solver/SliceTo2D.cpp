@@ -1,3 +1,5 @@
+//mpirun -np 1 test/solver/./SliceTo2D 128 128 128 10000 HOCKNEY --info 5
+
 #include "Ippl.h"
 
 #include <chrono>
@@ -12,7 +14,7 @@
 
 #include "Utility/IpplException.h"
 #include "Utility/IpplTimings.h"
-#include "Solver/FFTPoissonSolver.h"
+#include "PoissonSolvers/FFTOpenPoissonSolver.h"
 
 template <unsigned Dim>
 using Mesh_t = ippl::UniformCartesian<double, Dim>;
@@ -52,7 +54,7 @@ template <typename T>
 using ScalarField_t = typename ippl::Field<T, 2, Mesh_t<2>, Centering_t<2>>;
 
 template <typename T>
-using Solver_t = ippl::FFTPoissonSolver<VectorField_t<T>, ScalarField_t<T>>;
+using Solver_t = ippl::FFTOpenPoissonSolver<VectorField_t<T>, ScalarField_t<T>>;
 
 template <class PLayout>
 class Solve25D : public ippl::ParticleBase<PLayout> {
@@ -79,18 +81,12 @@ public:
     double binWidth_m;                        // width of longitudinal bin
     double globalMin_m;                       // min longitudinal coordinate across all ranks
     typename Base::particle_position_type P;  // particle velocity
-    typename Base::particle_position_type R;  // particle position
     typename Base::particle_position_type E;  // electric field at particle position
     ParticleAttrib<int> mapping;              // record the bin index of the i'th particle
 
-    Solve25D(PLayout& pl)
-        : Base(pl) {
-        // register the particle attributes
-        registerAttributes();
-    }
 
     Solve25D(PLayout& pl, Vector_t<double, 3>  hr, Vector_t<double, 3>  rmin, Vector_t<double, 3>  rmax,
-                     ippl::e_dim_tag decomp[3], double Q, double binWidth, double globalMin, std::string solver)
+                     ippl::e_dim_tag decomp[3], double Q, double binWidth ,double globalMin, std::string solver)
         : Base(pl) 
         , hr_m(hr)
         , rmin_m(rmin)
@@ -109,12 +105,31 @@ public:
         // register the particle attributes
         this->addAttribute(q);
         this->addAttribute(P);
-        this->addAttribute(R);
         this->addAttribute(E);
         this->addAttribute(mapping);
     }
 
     ~Solve25D() {}
+
+    void gatherStatistics(unsigned int totalP) {
+        unsigned int Total_particles = 0;
+        unsigned int local_particles = this->getLocalNum();
+
+        MPI_Reduce(&local_particles, &Total_particles, 1, MPI_UNSIGNED, MPI_SUM, 0,
+                   ippl::Comm->getCommunicator());
+
+        if (ippl::Comm->rank() == 0) {
+            if (Total_particles != totalP) {
+                std::cout << "Total particles in the sim. " << totalP << " "
+                          << "after update: " << Total_particles << std::endl;
+                exit(1);
+            }
+        }
+
+        ippl::Comm->barrier();
+
+        std::cout << "Rank " << ippl::Comm->rank() << " has " << local_particles << std::endl;
+    }
 
     template <size_t nSlices>
     void scatterToSlices(std::array<ScalarField_t<double>, nSlices>& rhos, Kokkos::Array<Field_t<2>::view_type, nSlices>& rhoViews) {
@@ -137,21 +152,21 @@ public:
         const ippl::NDIndex<2>& lDom = layout.getLocalNDIndex();
         const int nghost             = rhos[0].getNghost();
 
-        auto Rview = R.getView();
+        auto Rview = this->R.getView();
         auto mappingView = mapping.getView();
         auto qView = q.getView();
 
-        //double sMax;//, sMin;
+        //double sMax, sMin;
         // parallel min/max loop (will be strictly necessary when the position data is on GPUs)
         //Kokkos::parallel_reduce(
         //    "Find min and max s coordinate", this->getLocalNum(),
-        //    KOKKOS_LAMBDA(size_t particleIndex, double& localMax/*, double& localMin*/) {
+        //    KOKKOS_LAMBDA(size_t particleIndex, double& localMax, double& localMin) {
         //        auto position = Rview(particleIndex);
         //        auto s = position[2];
-                //if (s < localMin) localMin = s;
+        //        if (s < localMin) localMin = s;
         //        if (s > localMax) localMax = s;
         //    },
-        //    Kokkos::Max<double>(sMax)//, Kokkos::Min<double>(sMin)
+        //    Kokkos::Max<double>(sMax), Kokkos::Min<double>(sMin)
         //);
         // may or may not be necessary depending on final design, but just in case,
         // make sure you have the indices before continuing
@@ -218,7 +233,7 @@ public:
         const ippl::NDIndex<2>& lDom = layout.getLocalNDIndex();
         const int nghost             = rhos[0].getNghost();
 
-        auto Rview = R.getView();
+        auto Rview = this->R.getView();
         auto mappingView = mapping.getView();
         auto Eview = E.getView();
 
@@ -248,7 +263,7 @@ public:
 };
 
 
-std::vector<double> generateRandomPointOnCylinder(double centerX, double centerY, double radius, double height) {
+ippl::Vector<double, 3> generateRandomPointOnCylinder(double centerX, double centerY, double radius, double height) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<double> angle_distribution(0.0, 2 * Kokkos::numbers::pi_v<double>);
@@ -266,7 +281,7 @@ std::vector<double> generateRandomPointOnCylinder(double centerX, double centerY
     return {x, y, l};
 }
 
-std::vector<double> generateRandomPointOnEllipsoid(double centreX, double centreY,double centerZ, double a, double b, double c) {
+ippl::Vector<double, 3> generateRandomPointOnEllipsoid(double centreX, double centreY,double centerZ, double a, double b, double c) {
     
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -294,7 +309,7 @@ int main(int argc, char* argv[]) {
         static IpplTimings::TimerRef mainTimer = IpplTimings::getTimer("mainTimer");
         IpplTimings::startTimer(mainTimer);
         //auto start                = std::chrono::high_resolution_clock::now();
-        const unsigned int totalP = std::atoi(argv[5]);
+        const unsigned int totalP = std::atoi(argv[4]);
 
         msg << "benchmarkUpdate" << endl
             << " Np= " << totalP << " grid = " << nr << endl;
@@ -329,27 +344,20 @@ int main(int argc, char* argv[]) {
         FieldLayout_t<3> FL(domain, decomp);
         PLayout_t<double, 3> PL(FL, mesh);
 
-        std::string solver = argv[6];   
-        const size_t numSlices = 30; //std::atoi(argv[4]);
+        std::string solver = argv[5];   
+        const size_t numSlices = 10; //std::atoi(argv[6]);
 
         double globalMin = 0.1;
         double globalMax = 0.9;
         double binWidth = (globalMax - globalMin) / numSlices;
         double Q = 1.0;
-        P        = std::make_unique<bunch_type>(PL, hr, rmin, rmax, decomp, Q, binWidth, globalMin, solver);
+        P        = std::make_unique<bunch_type>(PL, hr, rmin, rmax, decomp, Q, binWidth ,globalMin, solver);
 
         unsigned long int nloc = totalP / ippl::Comm->size();
 
         static IpplTimings::TimerRef particleCreation = IpplTimings::getTimer("particlesCreation");
         IpplTimings::startTimer(particleCreation);
         P->create(nloc);
-
-        std::mt19937_64 eng[3];
-        for (unsigned i = 0; i < 3; i++) {
-            eng[i].seed(42 + i * 3);
-            eng[i].discard(nloc * ippl::Comm->rank());
-        }
-        std::uniform_real_distribution<double> unif(0, 1);
 
         typename bunch_type::particle_position_type::HostMirror R_host = P->R.getHostMirror();
 
@@ -366,15 +374,23 @@ int main(int argc, char* argv[]) {
         double centreX = (rmin[0] + rmax[0]) / 2; // make sure that the test distribution in centred on the mesh origin
         double centreY = (rmin[1] + rmax[1]) / 2;
         for (unsigned long int i = 0; i < nloc; i++) {
-            //std::vector<double> point = generateRandomPointOnCylinder(centreX, centreY, radius, length);
-            std::vector<double> point = generateRandomPointOnEllipsoid(centreX, centreY, 0.5, radius, radius, (globalMax -globalMin)/2);            
+            //std::vector<double> point = generateRandomPointOnCylinder(centreX, centreY, radius, (globalMax -globalMin)/2);
+            ippl::Vector<double, 3> point = generateRandomPointOnEllipsoid(centreX, centreY, 0.5, radius, radius, (globalMax -globalMin)/2);            
             for (int d = 0; d < 3; d++) {
                 R_host(i)[d] = point[d];
                 sum_coord += R_host(i)[d];
             }
             outfile << point[0] << "," << point[1] << "," << point[2] << "\n";
         }
-        
+
+        double global_sum_coord = 0.0;
+        MPI_Reduce(&sum_coord, &global_sum_coord, 1, MPI_DOUBLE, MPI_SUM, 0,
+                   ippl::Comm->getCommunicator());
+
+        if (ippl::Comm->rank() == 0) {
+            std::cout << "Sum Coord: " << std::setprecision(16) << global_sum_coord << std::endl;
+        }
+
         Kokkos::deep_copy(P->R.getView(), R_host);
         P->q = P->Q_m;
 
@@ -385,6 +401,8 @@ int main(int argc, char* argv[]) {
         IpplTimings::startTimer(UpdateTimer);
         P->update();
         IpplTimings::stopTimer(UpdateTimer);
+
+        P->gatherStatistics(totalP);
 
         msg << "particles created and initial conditions assigned " << endl;
 
@@ -403,7 +421,7 @@ int main(int argc, char* argv[]) {
 
         Mesh_t<2> meshRho(owned, hxRho, originRho);
 
-        ippl::FieldLayout<2> layout(owned, decompRho);  // 0 and 1 th element of decomp is serial
+        FieldLayout_t<2> layout(owned, decompRho);  // 0 and 1 th element of decomp is serial
         
         std::array<ScalarField_t<double>, numSlices> rhos;
         Kokkos::Array<ScalarField_t<double>::view_type, numSlices> rhoViews;
@@ -421,7 +439,6 @@ int main(int argc, char* argv[]) {
             EViews[i] = Efields[i].getView();
         }
 
-        
         // call slice and scatter function
         P->scatterToSlices(rhos, rhoViews); 
         // 2d solve 
@@ -510,10 +527,10 @@ int main(int argc, char* argv[]) {
         std::map<int, int> occurrences;
 
         // Count occurrences of each value
-        //auto mappingView = P->mapping.getView();
+        auto mappingView = P->mapping.getView();
 
         for (size_t i = 0; i < P->getLocalNum(); i++) {
-            occurrences[P->mapping(i)]++;
+            occurrences[mappingView(i)]++;
         }
 
         std::vector<double> particlesPerSlice;
@@ -572,7 +589,6 @@ int main(int argc, char* argv[]) {
 
         P->gatherFromSlices(rhos, EViews);
 
-        auto mappingView = P->mapping.getView();
         for (size_t i = 0; i < mappingView.extent(0); i++) {
             // assign the longitudinal value of Efield to the particles
             // the i th parting is assigned the longituninal field vlaue from the nth bin according to mapping
