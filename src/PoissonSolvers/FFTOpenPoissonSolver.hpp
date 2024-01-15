@@ -111,11 +111,11 @@ void unpack(const ippl::NDIndex<Dim> intersect, const View& view,
     unpack_impl<2, Tb, View, Dim>(intersect, view, fd, nghost, ldom, coordBool, dim1, dim2);
 }
 
-template <typename Tb, typename Tf, unsigned Dim>
+template <typename Tb, typename View, unsigned Dim>
 void solver_send(int BUF_MSG, int TAG, int id, int i, const ippl::NDIndex<Dim> intersection,
-                 const ippl::NDIndex<Dim> ldom, int nghost, Kokkos::View<Tf***>& view,
+                 const ippl::NDIndex<Dim> ldom, int nghost, View& view,
                  ippl::detail::FieldBufferData<Tb>& fd, std::vector<MPI_Request>& requests) {
-    using memory_space = typename Kokkos::View<Tf***>::memory_space;
+    using memory_space = typename View::memory_space;
 
     requests.resize(requests.size() + 1);
 
@@ -124,7 +124,7 @@ void solver_send(int BUF_MSG, int TAG, int id, int i, const ippl::NDIndex<Dim> i
 
     // Buffer message indicates the domain intersection (x, y, z, xy, yz, xz, xyz).
     ippl::mpi::Communicator::buffer_type<memory_space> buf =
-        ippl::Comm->getBuffer<memory_space, Tf>(BUF_MSG + id * 8 + i, nsends);
+        ippl::Comm->getBuffer<memory_space, Tb>(BUF_MSG + id * 8 + i, nsends);
 
     int tag = TAG + id;
 
