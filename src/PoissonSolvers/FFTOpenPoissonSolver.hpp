@@ -135,8 +135,7 @@ void solver_send(int BUF_MSG, int TAG, int id, int i, const ippl::NDIndex<Dim> i
 template <typename Tb, typename Tf, unsigned Dim>
 void solver_recv(int BUF_MSG, int TAG, int id, int i, const ippl::NDIndex<Dim> intersection,
                  const ippl::NDIndex<Dim> ldom, int nghost, Kokkos::View<Tf***>& view,
-                 ippl::detail::FieldBufferData<Tb>& fd, bool x = false, bool y = false,
-                 bool z = false) {
+                 ippl::detail::FieldBufferData<Tb>& fd, ippl::Vector<bool, Dim> coordBool) {
     using memory_space = typename Kokkos::View<Tf***>::memory_space;
 
     ippl::mpi::Communicator::size_type nrecvs;
@@ -152,7 +151,7 @@ void solver_recv(int BUF_MSG, int TAG, int id, int i, const ippl::NDIndex<Dim> i
     ippl::Comm->recv(i, tag, fd, *buf, nrecvs * sizeof(Tf), nrecvs);
     buf->resetReadPos();
 
-    unpack(intersection, view, fd, nghost, ldom, x, y, z);
+    unpack(intersection, view, fd, nghost, ldom, coordBool);
 }
 
 namespace ippl {
@@ -1051,7 +1050,9 @@ namespace ippl {
                                                nrecvs * sizeof(Trhs), nrecvs);
                                     buf->resetReadPos();
 
-                                    unpack(intersection, viewH, fd_m, nghostH, ldom1, row, col);
+                                    ippl::Vector<bool, Dim> coordBoolVec(false);
+                                    unpack(intersection, viewH, fd_m, nghostH, ldom1, coordBoolVec,
+                                           row, col);
                                 }
                             }
 
@@ -1640,8 +1641,9 @@ namespace ippl {
                 if (lDomains4[i].touches(intersection)) {
                     intersection = intersection.intersect(lDomains4[i]);
 
+                    ippl::Vector<bool, Dim> coordBoolVec(false);
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 0, i, intersection,
-                                ldom, nghost, view, fd_m);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -1663,8 +1665,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain4);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, false, false};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 1, i, intersection,
-                                ldom, nghost, view, fd_m, true, false, false);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -1686,8 +1689,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain4);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {false, true, false};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 2, i, intersection,
-                                ldom, nghost, view, fd_m, false, true, false);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -1709,8 +1713,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain4);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {false, false, true};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 3, i, intersection,
-                                ldom, nghost, view, fd_m, false, false, true);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -1736,8 +1741,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain4);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, true, false};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 4, i, intersection,
-                                ldom, nghost, view, fd_m, true, true, false);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -1763,8 +1769,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain4);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {false, true, true};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 5, i, intersection,
-                                ldom, nghost, view, fd_m, false, true, true);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -1790,8 +1797,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain4);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, false, true};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 6, i, intersection,
-                                ldom, nghost, view, fd_m, true, false, true);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -1821,8 +1829,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain4);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, true, true};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 7, i, intersection,
-                                ldom, nghost, view, fd_m, true, true, true);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
         }
@@ -2045,8 +2054,9 @@ namespace ippl {
                 if (lDomains2n1[i].touches(intersection)) {
                     intersection = intersection.intersect(lDomains2n1[i]);
 
+                    ippl::Vector<bool, Dim> coordBoolVec(false);
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 0, i, intersection,
-                                ldom, nghost, view, fd_m);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -2068,8 +2078,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain2n1);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, false, false};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 1, i, intersection,
-                                ldom, nghost, view, fd_m, true, false, false);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -2091,8 +2102,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain2n1);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {false, true, false};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 2, i, intersection,
-                                ldom, nghost, view, fd_m, false, true, false);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -2114,8 +2126,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain2n1);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {false, false, true};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 3, i, intersection,
-                                ldom, nghost, view, fd_m, false, false, true);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -2141,8 +2154,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain2n1);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, true, false};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 4, i, intersection,
-                                ldom, nghost, view, fd_m, true, true, false);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -2168,8 +2182,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain2n1);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {false, true, true};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 5, i, intersection,
-                                ldom, nghost, view, fd_m, false, true, true);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -2195,8 +2210,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain2n1);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, false, true};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 6, i, intersection,
-                                ldom, nghost, view, fd_m, true, false, true);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
 
@@ -2226,8 +2242,9 @@ namespace ippl {
 
                     intersection = intersection.intersect(domain2n1);
 
+                    ippl::Vector<bool, Dim> coordBoolVec = {true, true, true};
                     solver_recv(mpi::tag::VICO_RECV, mpi::tag::VICO_SOLVER, 7, i, intersection,
-                                ldom, nghost, view, fd_m, true, true, true);
+                                ldom, nghost, view, fd_m, coordBoolVec);
                 }
             }
         }
