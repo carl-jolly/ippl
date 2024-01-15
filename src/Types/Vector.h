@@ -42,6 +42,10 @@ namespace ippl {
         KOKKOS_FUNCTION
         Vector(const T& val);
 
+        Vector(const std::array<T, Dim>& a);
+
+        Vector(const std::array<std::vector<T>, Dim>& a);
+
         /*!
          * @param list of values
          */

@@ -15,7 +15,6 @@
 #include "Utility/PAssert.h"
 
 #include "FieldLayout/FieldLayout.h"
-#include "Partition/Partitioner.h"
 
 namespace ippl {
 
@@ -35,23 +34,21 @@ namespace ippl {
     }
 
     template <unsigned Dim>
-    FieldLayout<Dim>::FieldLayout()
-        : dLocalDomains_m("local domains (device)", 0)
+    FieldLayout<Dim>::FieldLayout(const mpi::Communicator& communicator)
+        : comm(communicator)
+        , dLocalDomains_m("local domains (device)", 0)
         , hLocalDomains_m(Kokkos::create_mirror_view(dLocalDomains_m)) {
         for (unsigned int d = 0; d < Dim; ++d) {
-            requestedLayout_m[d] = PARALLEL;
-            minWidth_m[d]        = 0;
+            minWidth_m[d] = 0;
         }
     }
 
     template <unsigned Dim>
-    FieldLayout<Dim>::FieldLayout(const NDIndex<Dim>& domain, e_dim_tag* p, bool isAllPeriodic)
-        : FieldLayout() {
-        initialize(domain, p, isAllPeriodic);
+    FieldLayout<Dim>::FieldLayout(mpi::Communicator communicator, const NDIndex<Dim>& domain,
+                                  std::array<bool, Dim> isParallel, bool isAllPeriodic)
+        : FieldLayout(communicator) {
+        initialize(domain, isParallel, isAllPeriodic);
     }
-
-    template <unsigned Dim>
-    FieldLayout<Dim>::~FieldLayout() {}
 
     template <unsigned Dim>
     void FieldLayout<Dim>::updateLayout(const std::vector<NDIndex<Dim>>& domains) {
@@ -71,36 +68,18 @@ namespace ippl {
     }
 
     template <unsigned Dim>
-    void FieldLayout<Dim>::initialize(const NDIndex<Dim>& domain, e_dim_tag* userflags,
+    void FieldLayout<Dim>::initialize(const NDIndex<Dim>& domain, std::array<bool, Dim> isParallel,
                                       bool isAllPeriodic) {
-        int nRanks = Comm->size();
+        int nRanks = comm.size();
 
         gDomain_m = domain;
 
         isAllPeriodic_m = isAllPeriodic;
 
-        // If the user did not specify parallel/serial flags then make all parallel.
-        long totparelems = 1;
-        isAllSerial_m = true;
-        for (unsigned d = 0; d < Dim; ++d) {
-            if (userflags == 0) {
-                requestedLayout_m[d] = PARALLEL;
-            } else {
-                requestedLayout_m[d] = userflags[d];
-            }
-
-            if (requestedLayout_m[d] == PARALLEL) {
-                totparelems *= domain[d].length();
-                isAllSerial_m = false;
-            }
-        }
-
-        if (nRanks < 2 || isAllSerial_m) {
+        if (nRanks < 2) {
             Kokkos::resize(dLocalDomains_m, nRanks);
             Kokkos::resize(hLocalDomains_m, nRanks);
-            for (int r = 0; r < nRanks; r++) {
-                hLocalDomains_m(r) = domain;
-            }
+            hLocalDomains_m(0) = domain;
             Kokkos::deep_copy(dLocalDomains_m, hLocalDomains_m);
             return;
         }
@@ -109,6 +88,11 @@ namespace ippl {
          * the number of ranks (if necessary) to just the number of elements along
          * parallel dims.
          */
+        long totparelems = 1;
+        for (unsigned d = 0; d < Dim; ++d) {
+            totparelems *= domain[d].length();
+        }
+
         if (totparelems < nRanks) {
             nRanks = totparelems;
         }
@@ -116,9 +100,8 @@ namespace ippl {
         Kokkos::resize(dLocalDomains_m, nRanks);
         Kokkos::resize(hLocalDomains_m, nRanks);
 
-        detail::Partitioner<Dim> partition;
-
-        partition.split(domain, hLocalDomains_m, requestedLayout_m, nRanks);
+        detail::Partitioner<Dim> partitioner;
+        partitioner.split(domain, hLocalDomains_m, isParallel, nRanks);
 
         findNeighbors();
 
@@ -134,7 +117,7 @@ namespace ippl {
 
     template <unsigned Dim>
     const typename FieldLayout<Dim>::NDIndex_t& FieldLayout<Dim>::getLocalNDIndex(int rank) const {
-        return hLocalDomains_m(rank);
+        return hLocalDomains_m(rank > 0 ? rank : comm.rank());
     }
 
     template <unsigned Dim>
@@ -167,7 +150,7 @@ namespace ippl {
 
     template <unsigned Dim>
     void FieldLayout<Dim>::write(std::ostream& out) const {
-        if (Comm->rank() > 0) {
+        if (comm.rank() > 0) {
             return;
         }
 
@@ -247,7 +230,7 @@ namespace ippl {
             neighborsRecvRange_m[i].clear();
         }
 
-        int myRank = Comm->rank();
+        int myRank = comm.rank();
 
         // get my local box
         auto& nd = hLocalDomains_m[myRank];
@@ -259,7 +242,7 @@ namespace ippl {
             IpplTimings::getTimer("findInternal");
         static IpplTimings::TimerRef findPeriodicNeighborsTimer =
             IpplTimings::getTimer("findPeriodic");
-        for (int rank = 0; rank < Comm->size(); ++rank) {
+        for (int rank = 0; rank < comm.size(); ++rank) {
             if (rank == myRank) {
                 // do not compare with my domain
                 continue;
