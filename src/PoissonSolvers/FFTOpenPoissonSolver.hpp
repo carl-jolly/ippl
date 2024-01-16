@@ -1376,50 +1376,50 @@ namespace ippl {
                             view(s, p, q) = view_g2n1(i + 1, j + 1, k + 1);
                         });
                 }
+            } else {
+                // Hockney case
+
+                // calculate square of the mesh spacing for each dimension
+                Vector_t hrsq(hr_m * hr_m);
+
+                // use the grnIField_m helper field to compute Green's function
+                for (unsigned int i = 0; i < Dim; ++i) {
+                    grn_mr = grn_mr + grnIField_m[i] * hrsq[i];
+                }
+
+                //  Need error for Dim != to 2 or 3 since no Green's function is implemented for
+                //  other dimensions
+                if (Dim == 3) {
+                    grn_mr = -1.0 / (4.0 * pi * sqrt(grn_mr));
+                } else if (Dim == 2) {
+                    grn_mr = log(sqrt(grn_mr)) / (2 * pi);
+                }
+
+                typename Field_t::view_type view = grn_mr.getView();
+                const int nghost                 = grn_mr.getNghost();
+                const auto& ldom                 = layout2_m->getLocalNDIndex();
+
+                // Kokkos parallel for loop to find (0,0,0) point and regularize
+                using index_array_type = typename RangePolicy<Dim>::index_array_type;
+                ippl::parallel_for(
+                    "Regularize Green's function ", grn_mr.getFieldRangePolicy(),
+                    KOKKOS_LAMBDA(const index_array_type& args) {
+                        Vector<int, Dim> iVec = args;
+                        Vector<int, Dim> igVec;
+                        scalar_type checkVal = 0;
+                        // go from local indices to global
+                        for (unsigned d = 0; d < Dim; ++d) {
+                            igVec[d] = iVec[d] + ldom[d].first() - nghost;
+
+                            checkVal += igVec[d];
+                        }
+
+                        // if (0,0,0), assign to it 1/(4*pi)
+                        const bool isZero = (checkVal == 0);
+                        apply(view, args) =
+                            isZero * (-1.0 / (4.0 * pi)) + (!isZero) * apply(view, args);
+                    });
             }
-        } else {
-            // Hockney case
-
-            // calculate square of the mesh spacing for each dimension
-            Vector_t hrsq(hr_m * hr_m);
-
-            // use the grnIField_m helper field to compute Green's function
-            for (unsigned int i = 0; i < Dim; ++i) {
-                grn_mr = grn_mr + grnIField_m[i] * hrsq[i];
-            }
-
-            //  Need error for Dim != to 2 or 3 since no Green's function is implemented for other
-            //  dimensions
-            if (Dim == 3) {
-                grn_mr = -1.0 / (4.0 * pi * sqrt(grn_mr));
-            } else if (Dim == 2) {
-                grn_mr = log(sqrt(grn_mr)) / (2 * pi);
-            }
-
-            typename Field_t::view_type view = grn_mr.getView();
-            const int nghost                 = grn_mr.getNghost();
-            const auto& ldom                 = layout2_m->getLocalNDIndex();
-
-            // Kokkos parallel for loop to find (0,0,0) point and regularize
-            using index_array_type = typename RangePolicy<Dim>::index_array_type;
-            ippl::parallel_for(
-                "Regularize Green's function ", grn_mr.getFieldRangePolicy(),
-                KOKKOS_LAMBDA(const index_array_type& args) {
-                    Vector<int, Dim> iVec = args;
-                    Vector<int, Dim> igVec;
-                    scalar_type checkVal = 0;
-                    // go from local indices to global
-                    for (unsigned d = 0; d < Dim; ++d) {
-                        igVec[d] = iVec[d] + ldom[d].first() - nghost;
-
-                        checkVal += igVec[d];
-                    }
-
-                    // if (0,0,0), assign to it 1/(4*pi)
-                    const bool isZero = (checkVal == 0);
-                    apply(view, args) =
-                        isZero * (-1.0 / (4.0 * pi)) + (!isZero) * apply(view, args);
-                });
         }
 
         // start a timer
