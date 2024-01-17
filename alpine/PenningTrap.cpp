@@ -19,10 +19,8 @@
 //     srun ./PenningTrap 128 128 128 10000 300 FFT 0.01 LeapFrog --overallocate 1.0 --info 10
 
 constexpr unsigned Dim = 3;
-using T                = double;
-const char* TestName   = "PenningTrap";
-
-#include "Ippl.h"
+using T = double;
+const char* TestName = "PenningTrap";
 
 #include <Kokkos_MathematicalConstants.hpp>
 #include <Kokkos_MathematicalFunctions.hpp>
@@ -34,11 +32,10 @@ const char* TestName   = "PenningTrap";
 #include <string>
 #include <vector>
 
-#include "datatypes.h"
-
+#include "Ippl.h"
 #include "Utility/IpplTimings.h"
-
 #include "Manager/PicManager.h"
+#include "datatypes.h"
 #include "PenningTrapManager.h"
 
 int main(int argc, char* argv[]) {
@@ -56,10 +53,10 @@ int main(int argc, char* argv[]) {
         for (unsigned d = 0; d < Dim; d++) {
             nr[d] = std::atoi(argv[arg++]);
         }
-        size_type totalP        = std::atoll(argv[arg++]);
-        int nt                  = std::atoi(argv[arg++]);
-        std::string solver      = argv[arg++];
-        double lbt              = std::atof(argv[arg++]);
+        size_type totalP = std::atoll(argv[arg++]);
+        int nt  = std::atoi(argv[arg++]);
+        std::string solver = argv[arg++];
+        double lbt = std::atof(argv[arg++]);
         std::string step_method = argv[arg++];
 
         // Create an instance of a manger for the considered application

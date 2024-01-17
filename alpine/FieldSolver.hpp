@@ -2,36 +2,35 @@
 #define IPPL_FIELD_SOLVER_H
 
 #include <memory>
-
 #include "Manager/BaseManager.h"
 
 // Define the FieldSolver class
 template <typename T, unsigned Dim>
 class FieldSolver : public ippl::FieldSolverBase<T, Dim> {
-private:
-    Field_t<Dim>* rho_m;
-    VField_t<T, Dim>* E_m;
-    Field<T, Dim>* phi_m;
+  private:
+    Field_t<Dim> *rho_m;
+    VField_t<T, Dim> *E_m;
+    Field<T, Dim> *phi_m;
 
-public:
-    FieldSolver(std::string solver, Field_t<Dim>* rho, VField_t<T, Dim>* E, Field<T, Dim>* phi)
-        : ippl::FieldSolverBase<T, Dim>(solver)
-        , rho_m(rho)
-        , E_m(E)
-        , phi_m(phi) {
-        setPotentialBCs();
-    }
+  public:
+    FieldSolver(std::string solver, Field_t<Dim> *rho, VField_t<T, Dim> *E, Field<T, Dim> *phi)
+          : ippl::FieldSolverBase<T, Dim>(solver)
+          , rho_m(rho)
+          , E_m(E)
+          , phi_m(phi) {
+            setPotentialBCs();
+          }
 
-    ~FieldSolver() {}
+    ~FieldSolver(){}
 
-    Field_t<Dim>* getRho() const { return rho_m; }
-    void setRho(Field_t<Dim>* rho) { rho_m = rho; }
+    Field_t<Dim> *getRho() const { return rho_m; }
+    void setRho(Field_t<Dim> *rho){ rho_m = rho; }
 
-    VField_t<T, Dim>* getE() const { return E_m; }
-    void setE(VField_t<T, Dim>* E) { E_m = E; }
+    VField_t<T, Dim> *getE() const { return E_m; }
+    void setE(VField_t<T, Dim> *E){ E_m = E; }
 
-    Field<T, Dim>* getPhi() const { return phi_m; }
-    void setPhi(Field<T, Dim>* phi) { phi_m = phi; }
+    Field<T, Dim> *getPhi() const { return phi_m; }
+    void setPhi(Field<T, Dim> *phi){ phi_m = phi; }
 
     void initSolver() override {
         Inform m("solver ");
@@ -82,6 +81,7 @@ public:
                 if (iterations > 0) {
                     log << solver.getResidue() << "," << iterations << endl;
                 }
+
             }
             ippl::Comm->barrier();
         } else if (this->getStype() == "FFT") {

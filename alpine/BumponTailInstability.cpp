@@ -15,14 +15,11 @@
 //     ovfactor = Over-allocation factor for the buffers used in the communication. Typical
 //                values are 1.0, 2.0. Value 1.0 means no over-allocation.
 //     Example:
-//     srun ./BumponTailInstability 128 128 128 10000 10 FFT 0.01 LeapFrog --overallocate 2.0 --info
-//     10
+//     srun ./BumponTailInstability 128 128 128 10000 10 FFT 0.01 LeapFrog --overallocate 2.0 --info 10
 
 constexpr unsigned Dim = 3;
-using T                = double;
-const char* TestName   = "BumponTailInstability";
-
-#include "Ippl.h"
+using T = double;
+const char* TestName = "BumponTailInstability";
 
 #include <Kokkos_MathematicalConstants.hpp>
 #include <Kokkos_MathematicalFunctions.hpp>
@@ -34,12 +31,11 @@ const char* TestName   = "BumponTailInstability";
 #include <string>
 #include <vector>
 
-#include "datatypes.h"
-
+#include "Ippl.h"
 #include "Utility/IpplTimings.h"
-
-#include "BumponTailInstabilityManager.h"
 #include "Manager/PicManager.h"
+#include "datatypes.h"
+#include "BumponTailInstabilityManager.h"
 
 int main(int argc, char* argv[]) {
     ippl::initialize(argc, argv);
@@ -57,10 +53,10 @@ int main(int argc, char* argv[]) {
             nr[d] = std::atoi(argv[arg++]);
         }
 
-        size_type totalP        = std::atoll(argv[arg++]);
-        int nt                  = std::atoi(argv[arg++]);
-        std::string solver      = argv[arg++];
-        double lbt              = std::atof(argv[arg++]);
+        size_type totalP = std::atoll(argv[arg++]);
+        int nt  = std::atoi(argv[arg++]);
+        std::string solver = argv[arg++];
+        double lbt = std::atof(argv[arg++]);
         std::string step_method = argv[arg++];
 
         // Create an instance of a manger for the considered application
