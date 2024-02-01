@@ -25,7 +25,6 @@
 // along with IPPL. If not, see <https://www.gnu.org/licenses/>.
 //
 
-
 // TODO:
 // Add this file to cmake lists once pack, unpack and the header file sre sorted
 #include "Ippl.h"
@@ -59,7 +58,7 @@ KOKKOS_INLINE_FUNCTION T gaussian(T x, T y, T sigma = 0.05, T mu = 0.5) {
     T prefactor = (1 / (2 * pi * sigma * sigma));
     T r2        = (x - mu) * (x - mu) + (y - mu) * (y - mu);
 
-    return prefactor * exp(-r2 /(2 * sigma * sigma));
+    return prefactor * exp(-r2 / (2 * sigma * sigma));
 }
 
 template <typename T>
@@ -67,10 +66,10 @@ KOKKOS_INLINE_FUNCTION T exact_fct(T x, T y, T sigma = 0.05, T mu = 0.5) {
     T pi = Kokkos::numbers::pi_v<T>;
 
     T r2 = (x - mu) * (x - mu) + (y - mu) * (y - mu);
-    // the argument of expint is -ve because std::expint is defined as the integral from -x to inf 
-    // the equation for the potential in Zou et al (2021) defines it from +x to inf, hence the factor of -1
-    return (1 / (4.0 * pi)) * (std::expint(-r2/(2 * sigma * sigma)) - std::log(r2));
-
+    // the argument of expint is -ve because std::expint is defined as the integral from -x to inf
+    // the equation for the potential in Zou et al (2021) defines it from +x to inf, hence the
+    // factor of -1
+    return (1 / (4.0 * pi)) * (std::expint(-r2 / (2 * sigma * sigma)) - std::log(r2));
 }
 
 template <typename T>
@@ -78,14 +77,14 @@ KOKKOS_INLINE_FUNCTION ippl::Vector<T, 2> exact_E(T x, T y, T sigma = 0.05, T mu
     T pi     = Kokkos::numbers::pi_v<T>;
     T r2     = (x - mu) * (x - mu) + (y - mu) * (y - mu);
     T factor = ((1 / (4 * pi)) * (2 * (1 - exp(-r2 / (2 * sigma * sigma))))) / (r2);
-    //T factor = (1 / (2 * pi)) * (1 / r2) * (exp((-r2) / (2 * sigma * sigma)) - 1);
-    
-    //T factor = - exp(-r2/(2*sigma*sigma)) / (r2/(2*sigma*sigma));
+    // T factor = (1 / (2 * pi)) * (1 / r2) * (exp((-r2) / (2 * sigma * sigma)) - 1);
 
-    
+    // T factor = - exp(-r2/(2*sigma*sigma)) / (r2/(2*sigma*sigma));
+
     ippl::Vector<T, 2> Efield = {(x - mu), (y - mu)};
-    
-    //ippl::Vector<T, 2> Efield = {(1/(4*pi)) * (2*(x - mu)/r2  - factor), (1/(4*pi)) * (2*(y - mu)/r2 - factor)};
+
+    // ippl::Vector<T, 2> Efield = {(1/(4*pi)) * (2*(x - mu)/r2  - factor), (1/(4*pi)) * (2*(y -
+    // mu)/r2 - factor)};
 
     return Efield * factor;
 }
@@ -144,9 +143,8 @@ void compute_convergence(std::string algorithm, int pt) {
     ippl::NDIndex<2> owned(I, I);
 
     // specifies decomposition; here all dimensions are parallel
-    ippl::e_dim_tag decomp[2];
-    for (unsigned int d = 0; d < 2; d++)
-        decomp[d] = ippl::PARALLEL;
+    std::array<bool, 2> isParallel;
+    isParallel.fill(true);
 
     // unit box
     T dx                      = 1.0 / pt;
@@ -155,7 +153,7 @@ void compute_convergence(std::string algorithm, int pt) {
     Mesh_t<T> mesh(owned, hx, origin);
 
     // all parallel layout, standard domain, normal axis order
-    ippl::FieldLayout<2> layout(owned, decomp);
+    ippl::FieldLayout<2> layout(MPI_COMM_WORLD, owned, isParallel);
 
     // define the R (rho) field
     ScalarField_t<T> rho;
@@ -176,8 +174,7 @@ void compute_convergence(std::string algorithm, int pt) {
     const auto& ldom = layout.getLocalNDIndex();
 
     Kokkos::parallel_for(
-        "Assign rho field", rho.getFieldRangePolicy(),
-        KOKKOS_LAMBDA(const int i, const int j) {
+        "Assign rho field", rho.getFieldRangePolicy(), KOKKOS_LAMBDA(const int i, const int j) {
             // go from local to global indices
             const int ig = i + ldom[0].first() - nghost;
             const int jg = j + ldom[1].first() - nghost;
@@ -193,8 +190,7 @@ void compute_convergence(std::string algorithm, int pt) {
     typename ScalarField_t<T>::view_type view_exact = exact.getView();
 
     Kokkos::parallel_for(
-        "Assign exact field",  exact.getFieldRangePolicy(),
-        KOKKOS_LAMBDA(const int i, const int j) {
+        "Assign exact field", exact.getFieldRangePolicy(), KOKKOS_LAMBDA(const int i, const int j) {
             const int ig = i + ldom[0].first() - nghost;
             const int jg = j + ldom[1].first() - nghost;
 
@@ -234,7 +230,9 @@ void compute_convergence(std::string algorithm, int pt) {
     if (algorithm == "HOCKNEY") {
         params.add("algorithm", Solver_t<T>::HOCKNEY);
     } else {
-        throw IpplException("TestGaussian_convergence.cpp main()", "Unrecognized algorithm type - for a 2D solve only HOCKEY is available");
+        throw IpplException(
+            "TestGaussian_convergence.cpp main()",
+            "Unrecognized algorithm type - for a 2D solve only HOCKNEY is available");
     }
 
     // add output type
@@ -243,12 +241,12 @@ void compute_convergence(std::string algorithm, int pt) {
     // define an FFTPoissonSolver object
     Solver_t<T> FFTsolver(fieldE, rho, params);
 
-    // solve the Poisson equation -> rho contains the solution (phi) now   
+    // solve the Poisson equation -> rho contains the solution (phi) now
     FFTsolver.solve();
 
     // compute relative error norm for potential
-    rho   = rho - exact;
-    
+    rho = rho - exact;
+
     T err = norm(rho) / norm(exact);
 
     // compute relative error norm for the E-field components
@@ -268,8 +266,7 @@ void compute_convergence(std::string algorithm, int pt) {
 
         T globaltemp = 0.0;
 
-        MPI_Datatype mpi_type = get_mpi_datatype<T>(temp);
-        MPI_Allreduce(&temp, &globaltemp, 1, mpi_type, MPI_SUM, ippl::Comm->getCommunicator());
+        ippl::Comm->allreduce(temp, globaltemp, 1, std::plus<T>());
         T errorNr = std::sqrt(globaltemp);
 
         temp = 0.0;
@@ -282,13 +279,14 @@ void compute_convergence(std::string algorithm, int pt) {
             Kokkos::Sum<T>(temp));
 
         globaltemp = 0.0;
-        MPI_Allreduce(&temp, &globaltemp, 1, mpi_type, MPI_SUM, ippl::Comm->getCommunicator());
+        ippl::Comm->allreduce(temp, globaltemp, 1, std::plus<T>());
         T errorDr = std::sqrt(globaltemp);
 
         errE[d] = errorNr / errorDr;
     }
 
-    errorMsg << std::setprecision(16) << dx << " " << err << " " << errE[0] << " " << errE[1] << endl;
+    errorMsg << std::setprecision(16) << dx << " " << err << " " << errE[0] << " " << errE[1]
+             << endl;
 
     return;
 }
@@ -319,11 +317,11 @@ int main(int argc, char* argv[]) {
 
         msg << "Spacing Error ErrorEx ErrorEy" << endl;
 
-        for (int p = 0; p < n; ++p) {
+        for (int pt : N) {
             if (precision == "DOUBLE") {
-                compute_convergence<double>(algorithm, N[p]);
+                compute_convergence<double>(algorithm, pt);
             } else {
-                compute_convergence<float>(algorithm, N[p]);
+                compute_convergence<float>(algorithm, pt);
             }
         }
 

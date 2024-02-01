@@ -64,7 +64,7 @@ public:
 
     Field<double, 2> phi_m;
 
-    ippl::e_dim_tag decomp_m[3];
+    std::array<bool, 3> isParallel_m;
 
     Vector_t<double, 3> hr_m;
     Vector_t<double, 3> rmin_m;
@@ -86,7 +86,7 @@ public:
 
 
     Solve25D(PLayout& pl, Vector_t<double, 3>  hr, Vector_t<double, 3>  rmin, Vector_t<double, 3>  rmax,
-                     ippl::e_dim_tag decomp[3], double Q, double binWidth ,double globalMin, std::string solver)
+                     std::array<bool, 3> isParallel, double Q, double binWidth ,double globalMin, std::string solver)
         : Base(pl) 
         , hr_m(hr)
         , rmin_m(rmin)
@@ -97,7 +97,7 @@ public:
         , globalMin_m(globalMin) {
         registerAttributes();
         for (unsigned int i = 0; i < 3; i++) {
-            decomp_m[i] = decomp[i];
+            isParallel_m[i] = isParallel[i];
         }
     }
 
@@ -322,12 +322,9 @@ int main(int argc, char* argv[]) {
             domain[i] = ippl::Index(nr[i]);
         }
 
-        ippl::e_dim_tag decomp[3];
-
-        decomp[0] = ippl::SERIAL; 
-        decomp[1] = ippl::SERIAL;
-        decomp[2] = ippl::PARALLEL; //  Only want to divide up the domain along the beam axis
-        // ie ippl will divde up along the axis of the beam so that 
+        std::array<bool, 3> isParallel = {false, false, true};
+        // Only want to divide up the domain along the beam axis
+        // i.e. ippl will divde up along the axis of the beam so that 
         // if, for example, there are two ranks then the first rank will get the 
         // the slices from s = 0 to s = (1/2)smax and the second rank will get the rest
 
@@ -341,7 +338,7 @@ int main(int argc, char* argv[]) {
         Vector_t<double, 3> origin = {rmin[0], rmin[1], rmin[2]};
 
         Mesh_t<3> mesh(domain, hr, origin); // this has dim 3 as this is the 3D particle distribution
-        FieldLayout_t<3> FL(domain, decomp);
+        FieldLayout_t<3> FL(MPI_COMM_WORLD, domain, isParallel);
         PLayout_t<double, 3> PL(FL, mesh);
 
         std::string solver = argv[5];   
@@ -351,7 +348,7 @@ int main(int argc, char* argv[]) {
         double globalMax = 0.9;
         double binWidth = (globalMax - globalMin) / numSlices;
         double Q = 1.0;
-        P        = std::make_unique<bunch_type>(PL, hr, rmin, rmax, decomp, Q, binWidth ,globalMin, solver);
+        P        = std::make_unique<bunch_type>(PL, hr, rmin, rmax, isParallel, Q, binWidth ,globalMin, solver);
 
         unsigned long int nloc = totalP / ippl::Comm->size();
 
@@ -415,13 +412,11 @@ int main(int argc, char* argv[]) {
         double dyRho                      = 1.0 / nr[1];
         ippl::Vector<double, 2> hxRho     = {dxRho, dyRho};
         ippl::Vector<double, 2> originRho = {0.0, 0.0};
-        ippl::e_dim_tag decompRho[2];
-        decompRho[0] = ippl::SERIAL; 
-        decompRho[1] = ippl::SERIAL;
+        std::array<bool, 2> isParallelRho = {false, false};
 
         Mesh_t<2> meshRho(owned, hxRho, originRho);
 
-        FieldLayout_t<2> layout(owned, decompRho);  // 0 and 1 th element of decomp is serial
+        FieldLayout_t<2> layout(MPI_COMM_WORLD, owned, isParallelRho);  // 0 and 1 th element of decomp is serial
         
         std::array<ScalarField_t<double>, numSlices> rhos;
         Kokkos::Array<ScalarField_t<double>::view_type, numSlices> rhoViews;
